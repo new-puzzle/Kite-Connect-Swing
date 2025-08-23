@@ -17,37 +17,15 @@ app = FastAPI()
 API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
 
-# Define the path for the token storage file
-token_path = "token_store.json"
-
-
-# --- Helper function to save the access token ---
-def save_access_token(token_data):
-    with open(token_path, "w") as f:
-        json.dump(token_data, f, default=str)
-    print("Access token saved successfully.")
-
-
-# --- Helper function to load the access token ---
-def load_access_token():
-    if os.path.exists(token_path):
-        try:
-            with open(token_path, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            return None  # Return None if file is corrupted
-    return None
-
-
 # --- Helper function to get a Kite connect instance with a valid token ---
 def get_authenticated_kite():
-    token_data = load_access_token()
-    if not token_data or "access_token" not in token_data:
-        return None
+    access_token = os.getenv("KITE_ACCESS_TOKEN")
+    if not access_token:
+        return None # User needs to set KITE_ACCESS_TOKEN env var
     
     kite = KiteConnect(api_key=API_KEY)
     try:
-        kite.set_access_token(token_data["access_token"])
+        kite.set_access_token(access_token)
     except Exception:
         # This could be due to an expired token
         return None
@@ -73,13 +51,18 @@ def login():
 def auth_callback(request_token: str):
     """
     Handles the callback from Kite after a successful login.
-    Generates a session and saves the access token.
+    Generates a session and returns the access token for manual setup.
     """
     try:
         kite = KiteConnect(api_key=API_KEY)
         session_data = kite.generate_session(request_token, api_secret=API_SECRET)
-        save_access_token(session_data)
-        return {"status": "success", "message": "Access token generated and saved successfully."}
+        access_token = session_data["access_token"]
+        
+        return {
+            "status": "success",
+            "message": "Access token generated. Please set this as a Vercel Environment Variable named KITE_ACCESS_TOKEN.",
+            "access_token": access_token
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
