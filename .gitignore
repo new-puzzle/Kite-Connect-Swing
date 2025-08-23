@@ -1,0 +1,9 @@
+# Environment variables
+.env
+
+# Token storage
+token_store.json
+
+# Python cache
+__pycache__/
+*.pyc
