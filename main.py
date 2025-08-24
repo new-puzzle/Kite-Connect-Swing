@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(servers=[{"url": "https://kite-connect-swing.vercel.app"}])
 
 # Get API key and secret from environment variables
 API_KEY = os.getenv("API_KEY")
