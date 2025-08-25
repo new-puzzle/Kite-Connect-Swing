@@ -10,5 +10,15 @@
       "src": "/(.*)",
       "dest": "main.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/save_daily_data",
+      "schedule": "35 10 * * *"  
+    },
+    {
+      "path": "/api/save_daily_data",
+      "schedule": "30 11 * * *"  
+    }
   ]
 }
