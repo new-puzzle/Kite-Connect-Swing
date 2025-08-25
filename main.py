@@ -1,3 +1,4 @@
+
 import os
 import json
 import datetime
@@ -15,7 +16,7 @@ load_dotenv()
 app = FastAPI(
     title="Kite Connect API",
     description="An API to interact with Kite Connect, with daily data caching.",
-    servers=[{"url": "https://zerodha-bridge.vercel.app"}]
+    servers=[{"url": "https://kite-connect-swing.vercel.app"}]
 )
 
 # Get API key and secret from environment variables
