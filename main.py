@@ -1,4 +1,3 @@
-
 import os
 import json
 import datetime
@@ -129,7 +128,7 @@ def calculate_and_build_portfolio_data(kite: KiteConnect):
             "todays_pnl_pct": round(total_todays_pnl_pct, 2)
         },
         "quotes": {
-            q['instrument_token']: {
+            str(q['instrument_token']): {
                 "close": q['ohlc']['close'],
                 "ltp": q['last_price']
             } for q in quotes.values()
@@ -141,6 +140,19 @@ def calculate_and_build_portfolio_data(kite: KiteConnect):
             "timestamp_utc": build_end_time.isoformat()
         }
     }
+
+def load_snapshot():
+    """
+    Loads the cached portfolio data from the file system.
+    Returns None if the file does not exist or cannot be loaded.
+    """
+    if os.path.exists(CACHE_FILE_PATH):
+        try:
+            with open(CACHE_FILE_PATH, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
 
 # --- API Endpoints ---
 
@@ -180,35 +192,66 @@ def auth_callback(request_token: str):
         raise HTTPException(status_code=400, detail=f"Could not generate session: {e}")
 
 @app.get("/api/portfolio")
-def get_full_portfolio():
+def get_full_portfolio(
+    mode: str = Query("auto", pattern="^(auto|live|cache)$")
+):
     """
     **Primary endpoint for the GPT.**
-    Tries to fetch live, calculated portfolio data. If it fails (e.g., after hours),
-    it falls back to serving the last successfully saved daily snapshot.
+    Fetches portfolio data based on the specified mode:
+    - `auto`: Tries live first; if live fails, falls back to cached snapshot.
+    - `live`: Forces live data fetch; returns 503 if live fails.
+    - `cache`: Forces cached snapshot; returns 503 if no snapshot is available.
     """
-    kite = get_authenticated_kite()
-    
-    if kite:
+    live_err = None
+
+    # 1) FORCE LIVE ONLY
+    if mode == "live":
+        kite = get_authenticated_kite()
+        if not kite:
+            raise HTTPException(status_code=503, detail="Live fetch failed: Authentication failed or token invalid.")
         try:
-            # Try to fetch live data
-            live_data = calculate_and_build_portfolio_data(kite)
-            return live_data
+            payload = calculate_and_build_portfolio_data(kite)
+            payload["source"] = "LIVE"
+            payload["mode_used"] = "live"
+            return payload
         except HTTPException as e:
-            # Fallback to cache if live fetch fails
-            if e.status_code == 500:
-                pass  # Continue to cache fallback
-            else:
-                raise e # Re-raise other HTTP exceptions
-    
-    # Fallback logic
-    if os.path.exists(CACHE_FILE_PATH):
-        with open(CACHE_FILE_PATH, 'r') as f:
-            return json.load(f)
-    else:
-        raise HTTPException(
-            status_code=503, 
-            detail="Live Kite API is unavailable and no cached data is present. Please try again during market hours."
-        )
+            raise HTTPException(status_code=503, detail=f"Live fetch failed: {e.detail}")
+
+    # 2) FORCE CACHE ONLY
+    elif mode == "cache":
+        snapshot = load_snapshot()
+        if snapshot and snapshot.get("holdings") is not None:
+            snapshot["source"] = "EOD"
+            snapshot["mode_used"] = "cache"
+            return snapshot
+        else:
+            raise HTTPException(status_code=503, detail="No cached snapshot available.")
+
+    # 3) AUTO MODE (try live, then fallback to cache)
+    elif mode == "auto":
+        kite = get_authenticated_kite()
+        if kite:
+            try:
+                payload = calculate_and_build_portfolio_data(kite)
+                payload["source"] = "LIVE"
+                payload["mode_used"] = "auto_live"
+                return payload
+            except HTTPException as e:
+                live_err = e.detail
+        else:
+            live_err = "Authentication failed or token invalid."
+
+        # Fallback to cache if live failed or not authenticated
+        snapshot = load_snapshot()
+        if snapshot and snapshot.get("holdings") is not None:
+            snapshot["source"] = "EOD"
+            snapshot["mode_used"] = f"auto_fallback (live_error: {live_err})" if live_err else "auto_fallback"
+            return snapshot
+        else:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Live fetch failed ({live_err}) and no cached snapshot available."
+            )
 
 @app.get("/api/save_daily_data")
 def save_daily_data():
