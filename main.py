@@ -161,7 +161,7 @@ def root():
     """Lists all available API routes."""
     return {
         "message": "Welcome to the Kite Connect API Bridge.",
-        "routes": ["/auth/login", "/api/portfolio", "/api/save_daily_data"]
+        "routes": ["/auth/login", "/api/portfolio", "/api/save_daily_data", "/api/ohlc"]
     }
 
 @app.get("/auth/login")
@@ -282,4 +282,40 @@ def save_daily_data():
         raise HTTPException(
             status_code=500, 
             detail=f"An error occurred while generating or saving portfolio data: {e}"
+        )
+
+@app.get("/api/ohlc", summary="Fetch historical OHLC data")
+def get_ohlc_data(
+    instrument_token: str = Query(..., description="Instrument token for the stock"),
+    from_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
+    to_date: str = Query(..., description="End date in YYYY-MM-DD format"),
+    interval: str = Query(..., description="Data interval (e.g., '5minute', 'day')"),
+):
+    """
+    Fetches historical Open, High, Low, Close (OHLC) data for a given instrument.
+    """
+    kite = get_authenticated_kite()
+    if not kite:
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication failed. Is KITE_ACCESS_TOKEN valid?"
+        )
+    
+    try:
+        # Validate date formats
+        datetime.datetime.strptime(from_date, '%Y-%m-%d')
+        datetime.datetime.strptime(to_date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date format. Please use YYYY-MM-DD."
+        )
+
+    try:
+        historical_data = kite.historical_data(instrument_token, from_date, to_date, interval)
+        return JSONResponse(content=historical_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"An error occurred while fetching historical data: {e}"
         )
