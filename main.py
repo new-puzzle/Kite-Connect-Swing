@@ -161,7 +161,18 @@ def root():
     """Lists all available API routes."""
     return {
         "message": "Welcome to the Kite Connect API Bridge.",
-        "routes": ["/auth/login", "/api/portfolio", "/api/save_daily_data", "/api/ohlc"]
+        "routes": [
+            "/auth/login",
+            "/auth/callback",
+            "/auth/check-token",
+            "/api/portfolio",
+            "/api/save_daily_data",
+            "/api/ohlc"
+        ],
+        "token_management": {
+            "check_token": "GET /auth/check-token - Check if your access token is still valid",
+            "refresh_token": "1. Visit /auth/login, 2. Login to Zerodha, 3. Get new token from /auth/callback, 4. Update KITE_ACCESS_TOKEN in Vercel"
+        }
     }
 
 @app.get("/auth/login")
@@ -175,21 +186,203 @@ def login():
 def auth_callback(request_token: str):
     """
     Handles the callback from Kite after a successful login.
-    Generates an access token. The user must then manually set this
-    as the KITE_ACCESS_TOKEN environment variable in Vercel.
+    Generates an access token. Returns an HTML page with the token for easy copying.
     """
     try:
         kite = KiteConnect(api_key=API_KEY)
         session_data = kite.generate_session(request_token, api_secret=API_SECRET)
         access_token = session_data["access_token"]
         
+        # Return an HTML page with the token for easy copying
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Kite Connect - Access Token</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    max-width: 800px;
+                    margin: 50px auto;
+                    padding: 20px;
+                    background: #f5f5f5;
+                }}
+                .container {{
+                    background: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }}
+                h1 {{
+                    color: #2962ff;
+                    margin-bottom: 10px;
+                }}
+                .success {{
+                    color: #4caf50;
+                    font-weight: bold;
+                    margin-bottom: 20px;
+                }}
+                .token-box {{
+                    background: #f8f9fa;
+                    border: 2px solid #2962ff;
+                    border-radius: 4px;
+                    padding: 15px;
+                    margin: 20px 0;
+                    word-break: break-all;
+                    font-family: 'Courier New', monospace;
+                    font-size: 14px;
+                    position: relative;
+                }}
+                .token-label {{
+                    font-weight: bold;
+                    color: #666;
+                    margin-bottom: 10px;
+                    font-size: 12px;
+                    text-transform: uppercase;
+                }}
+                .copy-btn {{
+                    background: #2962ff;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin-top: 10px;
+                }}
+                .copy-btn:hover {{
+                    background: #1e52d3;
+                }}
+                .instructions {{
+                    background: #fff3cd;
+                    border-left: 4px solid #ffc107;
+                    padding: 15px;
+                    margin: 20px 0;
+                }}
+                .instructions ol {{
+                    margin: 10px 0;
+                    padding-left: 20px;
+                }}
+                .instructions li {{
+                    margin: 8px 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>✅ Access Token Generated</h1>
+                <div class="success">Successfully authenticated with Kite Connect</div>
+                
+                <div class="token-label">Your Access Token (copy this):</div>
+                <div class="token-box" id="tokenBox">
+                    {access_token}
+                </div>
+                <button class="copy-btn" onclick="copyToken()">📋 Copy Token</button>
+                
+                <div class="instructions">
+                    <strong>Next Steps:</strong>
+                    <ol>
+                        <li>Click "Copy Token" button above (or manually select and copy the token)</li>
+                        <li>Go to <a href="https://vercel.com/dashboard" target="_blank">Vercel Dashboard</a></li>
+                        <li>Navigate to your project → Settings → Environment Variables</li>
+                        <li>Find <code>KITE_ACCESS_TOKEN</code> and click Edit</li>
+                        <li>Paste the new token and Save</li>
+                        <li>Vercel will automatically redeploy with the new token</li>
+                    </ol>
+                    <p><strong>Note:</strong> Token expires daily. Repeat this process each morning.</p>
+                </div>
+            </div>
+            
+            <script>
+                function copyToken() {{
+                    const token = "{access_token}";
+                    navigator.clipboard.writeText(token).then(function() {{
+                        const btn = document.querySelector('.copy-btn');
+                        const originalText = btn.textContent;
+                        btn.textContent = '✅ Copied!';
+                        btn.style.background = '#4caf50';
+                        setTimeout(function() {{
+                            btn.textContent = originalText;
+                            btn.style.background = '#2962ff';
+                        }}, 2000);
+                    }});
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        
+        from starlette.responses import HTMLResponse
+        return HTMLResponse(content=html_content)
+        
+    except Exception as e:
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Error - Kite Connect</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    max-width: 600px;
+                    margin: 50px auto;
+                    padding: 20px;
+                    background: #f5f5f5;
+                }}
+                .error {{
+                    background: #ffebee;
+                    border-left: 4px solid #f44336;
+                    padding: 20px;
+                    color: #c62828;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="error">
+                <h2>❌ Authentication Failed</h2>
+                <p>{str(e)}</p>
+                <p><a href="/auth/login">Try again</a></p>
+            </div>
+        </body>
+        </html>
+        """
+        from starlette.responses import HTMLResponse
+        return HTMLResponse(content=error_html, status_code=400)
+
+@app.get("/auth/check-token")
+def check_token_status():
+    """
+    Checks if the current KITE_ACCESS_TOKEN is valid.
+    Returns token status and user profile if valid.
+    Useful for daily checks to see if token needs refresh.
+    """
+    kite = get_authenticated_kite()
+    if not kite:
         return {
-            "status": "success",
-            "message": "Access token generated. Please set this as a Vercel Environment Variable named KITE_ACCESS_TOKEN.",
-            "access_token": access_token
+            "status": "invalid",
+            "message": "Token is invalid or expired. Please refresh using /auth/login",
+            "action_required": True,
+            "refresh_url": "https://kite-connect-swing.vercel.app/auth/login"
+        }
+    
+    try:
+        # Try to fetch user profile to verify token is working
+        profile = kite.profile()
+        return {
+            "status": "valid",
+            "message": "Token is valid and working",
+            "user_id": profile.get("user_id"),
+            "user_name": profile.get("user_name"),
+            "email": profile.get("email"),
+            "action_required": False
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not generate session: {e}")
+        return {
+            "status": "invalid",
+            "message": f"Token appears to be invalid: {e}",
+            "action_required": True,
+            "refresh_url": "https://kite-connect-swing.vercel.app/auth/login"
+        }
 
 @app.get("/api/portfolio")
 def get_full_portfolio(
@@ -286,13 +479,16 @@ def save_daily_data():
 
 @app.get("/api/ohlc", summary="Fetch historical OHLC data")
 def get_ohlc_data(
-    instrument_token: str = Query(..., description="Instrument token for the stock"),
+    symbol: str = Query(None, description="Stock symbol (e.g., 'RELIANCE', 'TCS'). Either symbol+exchange OR instrument_token required."),
+    exchange: str = Query("NSE", description="Exchange (NSE or BSE). Required if using symbol."),
+    instrument_token: str = Query(None, description="Instrument token. Either symbol+exchange OR instrument_token required."),
     from_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
     to_date: str = Query(..., description="End date in YYYY-MM-DD format"),
-    interval: str = Query(..., description="Data interval (e.g., '5minute', 'day')"),
+    interval: str = Query("day", description="Data interval (e.g., '5minute', 'day', '3minute', '15minute', 'hour')"),
 ):
     """
     Fetches historical Open, High, Low, Close (OHLC) data for a given instrument.
+    Can accept either symbol+exchange OR instrument_token.
     """
     kite = get_authenticated_kite()
     if not kite:
@@ -300,6 +496,46 @@ def get_ohlc_data(
             status_code=401, 
             detail="Authentication failed. Is KITE_ACCESS_TOKEN valid?"
         )
+    
+    # Validate that either symbol or instrument_token is provided
+    if not symbol and not instrument_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'symbol' (with 'exchange') OR 'instrument_token' must be provided."
+        )
+    
+    # If symbol is provided, look up the instrument token
+    if symbol and not instrument_token:
+        try:
+            # Get all instruments for the exchange
+            instruments = kite.instruments(exchange)
+            
+            # Search for the symbol (handle both with and without -EQ suffix for NSE)
+            symbol_upper = symbol.upper()
+            if exchange == "NSE":
+                # Try with -EQ suffix first
+                trading_symbol = f"{symbol_upper}-EQ"
+                instrument = next((inst for inst in instruments if inst['tradingsymbol'] == trading_symbol), None)
+                # If not found, try without suffix
+                if not instrument:
+                    instrument = next((inst for inst in instruments if inst['tradingsymbol'] == symbol_upper), None)
+            else:
+                instrument = next((inst for inst in instruments if inst['tradingsymbol'] == symbol_upper), None)
+            
+            if not instrument:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Symbol '{symbol}' not found on {exchange}. Please check the symbol name."
+                )
+            
+            instrument_token = str(instrument['instrument_token'])
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error looking up instrument for symbol '{symbol}': {e}"
+            )
     
     try:
         # Validate date formats
