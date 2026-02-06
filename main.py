@@ -283,8 +283,7 @@ def auth_callback(request_token: str):
                     <strong>Next Steps:</strong>
                     <ol>
                         <li>Click "Copy Token" button above (or manually select and copy the token)</li>
-                        <li>Go to <a href="https://vercel.com/dashboard" target="_blank">Vercel Dashboard</a></li>
-                        <li>Navigate to your project → Settings → Environment Variables</li>
+                        <li>Go to <a href="https://vercel.com/krishnas-projects-cbc3f03b/kite-connect-swing/settings/environment-variables" target="_blank">Vercel Environment Variables</a></li>
                         <li>Find <code>KITE_ACCESS_TOKEN</code> and click Edit</li>
                         <li>Paste the new token and Save</li>
                         <li>Vercel will automatically redeploy with the new token</li>
